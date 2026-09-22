@@ -1,0 +1,11 @@
+groups:
+  - name: love-capsule-availability
+    rules:
+      - alert: BackendDown
+        expr: up{job="backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Love Capsule backend is down
+          description: Prometheus cannot scrape the backend metrics endpoint.

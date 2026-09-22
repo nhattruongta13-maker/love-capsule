@@ -1,0 +1,95 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5034
+      ConnectionStrings__DefaultConnection: Data Source=/app/data/lovecapsule.db
+      Jwt__Issuer: LoveCapsule.Api
+      Jwt__Audience: LoveCapsule.Frontend
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY outside Docker Compose}
+      Security__AuthRateLimit__PermitLimit: ${AUTH_RATE_LIMIT_PERMIT_LIMIT:-10}
+      Security__AuthRateLimit__WindowSeconds: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
+      Security__AuthRateLimit__SegmentsPerWindow: ${AUTH_RATE_LIMIT_SEGMENTS:-2}
+    volumes:
+      - lovecapsule-data:/app/data
+      - lovecapsule-uploads:/app/wwwroot/uploads
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:5034/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+    ports:
+      - "5173:80"
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - app-network
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?Set GRAFANA_ADMIN_USER outside Docker Compose}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD outside Docker Compose}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - app-network
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  loki:
+    image: grafana/loki:3.5.0
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    networks:
+      - app-network
+
+  promtail:
+    image: grafana/promtail:3.5.0
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail-data:/tmp
+    networks:
+      - app-network
+
+volumes:
+  lovecapsule-data:
+  lovecapsule-uploads:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  promtail-data:
+
+networks:
+  app-network:
+    driver: bridge

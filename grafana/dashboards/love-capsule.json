@@ -1,0 +1,39 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Backend Up",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "up{job=\"backend\"}", "refId": "A"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}}
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests by Route",
+      "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0},
+      "targets": [{"expr": "sum by (route, method) (rate(lovecapsule_http_requests_total[5m]))", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx Responses",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [{"expr": "sum by (route, method) (rate(lovecapsule_http_responses_5xx_total[5m]))", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Authentication Events",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {"expr": "rate(lovecapsule_auth_login_succeeded_total[5m])", "legendFormat": "login succeeded", "refId": "A"},
+        {"expr": "rate(lovecapsule_auth_login_failed_total[5m])", "legendFormat": "login failed", "refId": "B"},
+        {"expr": "rate(lovecapsule_auth_refresh_token_reuse_total[5m])", "legendFormat": "refresh reuse", "refId": "C"}
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "title": "Love Capsule Operations",
+  "uid": "love-capsule-ops",
+  "version": 1
+}

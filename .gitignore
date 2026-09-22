@@ -1,0 +1,29 @@
+# .NET build output
+**/bin/
+**/obj/
+
+# Local SQLite databases and journal files
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+backend/*.db-journal
+
+# Local uploaded files
+backend/wwwroot/uploads/
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+!.env.example
+**/appsettings.Local.json
+**/secrets.json
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store

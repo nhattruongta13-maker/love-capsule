@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/wwwroot/uploads/
+.git/
+.github/
+.env
+.env.*
+!.env.example
