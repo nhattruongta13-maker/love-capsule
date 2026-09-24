@@ -13,7 +13,7 @@ public class ServiceTests
     [Fact]
     public async Task MemoryEventPublisher_DeliversEventsToMultipleSubscriptions()
     {
-        var publisher = new MemoryEventPublisher();
+        var publisher = new MemoryEventPublisher(new InMemoryEventBus());
         var first = publisher.Subscribe(123);
         var second = publisher.Subscribe(123);
         var outboxEvent = new OutboxEvent { Id = 7, RecipientUserId = 123, MemoryId = 42, EventType = "MemoryCreated", CreatedAt = DateTime.UtcNow };
@@ -35,7 +35,7 @@ public class ServiceTests
         await using var database = new TestDatabase();
         database.Context.Users.Add(new User { Id = 123, Email = "123@fake.com", DisplayName = "Fake User", PasswordHash = "test" });
         await database.Context.SaveChangesAsync();
-        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher());
+        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()));
 
         var memory = await service.CreateAsync(
             new CreateMemoryRequest("Private note", DateTime.UtcNow, "Happy", "Owner-only memory"),
@@ -52,7 +52,7 @@ public class ServiceTests
         await using var database = new TestDatabase();
         database.Context.Users.Add(new User { Id = 123, Email = "123@fake.com", DisplayName = "Fake User", PasswordHash = "test" });
         await database.Context.SaveChangesAsync();
-        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher());
+        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()));
 
         var memory = await service.CreateAsync(
             new CreateMemoryRequest("Private note", DateTime.UtcNow, "Happy", "Owner-only memory"),
@@ -70,7 +70,7 @@ public class ServiceTests
         await using var database = new TestDatabase();
         database.Context.Users.Add(new User { Id = 123, Email = "123@fake.com", DisplayName = "Fake User", PasswordHash = "test" });
         await database.Context.SaveChangesAsync();
-        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher());
+        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()));
 
         var memory = await service.CreateAsync(
             new CreateMemoryRequest("Temporary note", DateTime.UtcNow, "Happy", "Will be deleted"),
@@ -95,7 +95,7 @@ public class ServiceTests
         await using var database = new TestDatabase();
         database.Context.Users.Add(new User { Id = 123, Email = "123@fake.com", DisplayName = "Fake User", PasswordHash = "test" });
         await database.Context.SaveChangesAsync();
-        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher());
+        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()));
 
         var memory = await service.CreateAsync(
             new CreateMemoryRequest("Shared note", DateTime.UtcNow, "Loved", "Needs a relationship", Visibility: MemoryVisibility.Shared),
@@ -116,7 +116,7 @@ public class ServiceTests
             new MemoryEntry { OwnerUserId = 123, Title = "Mine", Description = "Owner 123", Mood = "Happy", Date = DateTime.UtcNow },
             new MemoryEntry { OwnerUserId = 456, Title = "Not mine", Description = "Owner 456", Mood = "Happy", Date = DateTime.UtcNow });
         await database.Context.SaveChangesAsync();
-        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher());
+        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()));
 
         var memories = await service.GetOwnedMemoriesAsync(123, null, null);
 

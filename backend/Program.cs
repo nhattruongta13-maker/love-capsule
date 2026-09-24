@@ -12,6 +12,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -77,6 +78,17 @@ builder.Services.AddScoped<MemoryService>();
 builder.Services.AddScoped<RelationshipService>();
 builder.Services.AddScoped<AuditService>();
 builder.Services.AddSingleton<AppMetrics>();
+if (builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddSingleton<IEventBus, InMemoryEventBus>();
+}
+else
+{
+    var redisConnectionString = builder.Configuration.GetConnectionString("Redis")
+        ?? throw new InvalidOperationException("Redis connection string is not configured.");
+    builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConnectionString));
+    builder.Services.AddSingleton<IEventBus, RedisEventBus>();
+}
 builder.Services.AddSingleton<MemoryEventPublisher>();
 builder.Services.AddControllers()
     .AddJsonOptions(options =>

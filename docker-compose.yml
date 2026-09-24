@@ -7,6 +7,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:5034
       ConnectionStrings__DefaultConnection: Data Source=/app/data/lovecapsule.db
+      ConnectionStrings__Redis: redis:6379
       Jwt__Issuer: LoveCapsule.Api
       Jwt__Audience: LoveCapsule.Frontend
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY outside Docker Compose}
@@ -18,11 +19,24 @@ services:
       - lovecapsule-uploads:/app/wwwroot/uploads
     networks:
       - app-network
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:5034/api/health"]
       interval: 30s
       timeout: 5s
       start_period: 15s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
       retries: 3
 
   frontend:
