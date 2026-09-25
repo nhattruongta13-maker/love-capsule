@@ -391,7 +391,32 @@ public class MemoryEndpointsTests : IClassFixture<TestApplicationFactory>
     }
 
     [Fact]
-    public async Task GetMemories_WithSearchAndMood_ReturnsOnlyMatchingMemory()
+    public async Task GetMemories_WithSemanticQuery_FindsMemoryWithNoLiteralWordOverlap()
+    {
+        await AuthenticateAsync();
+        var create = await _client.PostAsJsonAsync("/api/memories", new
+        {
+            title = "Sunset walk on the beach",
+            date = DateTime.UtcNow,
+            mood = "Peaceful",
+            description = "We watched the sun go down over the water and talked for hours."
+        });
+        create.EnsureSuccessStatusCode();
+        var created = await create.Content.ReadFromJsonAsync<JsonElement>();
+        var id = created.GetProperty("id").GetInt32();
+
+        // No word here appears literally in the memory above; only meaning should match it.
+        var response = await _client.GetAsync("/api/memories?search=evening%20stroll%20by%20the%20ocean");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var memories = await response.Content.ReadFromJsonAsync<JsonElement[]>() ?? Array.Empty<JsonElement>();
+        Assert.Contains(memories, memory => memory.GetProperty("id").GetInt32() == id);
+
+        await _client.DeleteAsync($"/api/memories/{id}");
+    }
+
+    [Fact]
+    public async Task GetMemories_WithSearchAndMood_NoLongerHardFiltersByMood()
     {
         await AuthenticateAsync();
         var loved = await _client.PostAsJsonAsync("/api/memories", new
@@ -416,12 +441,15 @@ public class MemoryEndpointsTests : IClassFixture<TestApplicationFactory>
         var happyMemory = await happy.Content.ReadFromJsonAsync<JsonElement>();
         var happyId = happyMemory.GetProperty("id").GetInt32();
 
+        // Mood is now a ranking signal (folded into the semantic query), not a hard
+        // equality filter, so both memories should still qualify via the keyword match.
         var response = await _client.GetAsync("/api/memories?search=garden&mood=Loved");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var memories = await response.Content.ReadFromJsonAsync<JsonElement[]>() ?? Array.Empty<JsonElement>();
-        Assert.Single(memories);
-        Assert.Equal(lovedId, memories[0].GetProperty("id").GetInt32());
+        Assert.Equal(2, memories.Length);
+        Assert.Contains(memories, memory => memory.GetProperty("id").GetInt32() == lovedId);
+        Assert.Contains(memories, memory => memory.GetProperty("id").GetInt32() == happyId);
 
         await _client.DeleteAsync($"/api/memories/{lovedId}");
         await _client.DeleteAsync($"/api/memories/{happyId}");

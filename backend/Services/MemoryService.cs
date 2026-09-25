@@ -1,48 +1,38 @@
 using LoveCapsule.Api.Data;
 using LoveCapsule.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace LoveCapsule.Api.Services;
 
 public sealed class MemoryService
 {
+    // Below this cosine similarity, a memory is considered semantically unrelated to the query.
+    private const float SemanticSimilarityThreshold = 0.35f;
+
     private readonly AppDbContext _db;
     private readonly IWebHostEnvironment _environment;
     private readonly MemoryEventPublisher _events;
+    private readonly EmbeddingService _embeddings;
 
-    public MemoryService(AppDbContext db, IWebHostEnvironment environment, MemoryEventPublisher events)
+    public MemoryService(AppDbContext db, IWebHostEnvironment environment, MemoryEventPublisher events, EmbeddingService embeddings)
     {
         _db = db;
         _environment = environment;
         _events = events;
+        _embeddings = embeddings;
     }
 
     public async Task<List<object>> GetOwnedMemoriesAsync(int userId, string? search, string? mood)
     {
-        var query = ApplyFilters(_db.Memories.Where(memory => memory.OwnerUserId == userId), search, mood);
-        return await query
-            .OrderByDescending(memory => memory.Date)
-            .Select(memory => (object)new
-            {
-                memory.Id,
-                memory.Title,
-                memory.Date,
-                memory.Mood,
-                memory.Description,
-                memory.ImageUrl,
-                memory.Visibility,
-                memory.PartnerCanEdit,
-                shared = memory.Visibility == MemoryVisibility.Shared
-            })
-            .ToListAsync();
+        var memories = await SearchAsync(_db.Memories.Where(memory => memory.OwnerUserId == userId), search, mood);
+        return memories.Select(ToOwnedMemoryDto).ToList();
     }
 
     public async Task<List<MemoryEntry>> GetSharedMemoriesAsync(int userId, int relationshipId, string? search, string? mood)
     {
-        var query = ApplyFilters(_db.Memories.Where(memory =>
+        return await SearchAsync(_db.Memories.Where(memory =>
             memory.RelationshipId == relationshipId && memory.Visibility == MemoryVisibility.Shared), search, mood);
-
-        return await query.OrderByDescending(memory => memory.Date).ToListAsync();
     }
 
     public async Task<MemoryEntry?> CreateAsync(CreateMemoryRequest request, int ownerUserId)
@@ -77,6 +67,7 @@ public sealed class MemoryService
 
         var recipients = await GetRecipientsAsync(entry);
         var outboxEvents = BuildOutboxEvents(entry.Id, "MemoryCreated", recipients);
+        entry.Embedding = JsonSerializer.Serialize(_embeddings.Embed(BuildEmbeddingText(entry)));
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
 
@@ -121,6 +112,7 @@ public sealed class MemoryService
         entry.Mood = string.IsNullOrWhiteSpace(request.Mood) ? "Sweet" : request.Mood.Trim();
         entry.Description = request.Description.Trim();
         entry.ImageUrl = request.ImageUrl?.Trim() ?? string.Empty;
+        entry.Embedding = JsonSerializer.Serialize(_embeddings.Embed(BuildEmbeddingText(entry)));
 
         var recipients = await GetRecipientsAsync(entry);
         var outboxEvents = BuildOutboxEvents(entry.Id, "MemoryUpdated", recipients);
@@ -224,25 +216,86 @@ public sealed class MemoryService
         return recipients.ToList();
     }
 
-    private IQueryable<MemoryEntry> ApplyFilters(IQueryable<MemoryEntry> query, string? search, string? mood)
+    // A memory qualifies if the free-text search literally appears in it, OR if it's semantically
+    // close enough to the combined search+mood query; everything that qualifies is then ranked
+    // purely by semantic similarity score, so keyword matches don't automatically outrank others.
+    private async Task<List<MemoryEntry>> SearchAsync(IQueryable<MemoryEntry> baseQuery, string? search, string? mood)
     {
-        if (!string.IsNullOrWhiteSpace(search))
+        var memories = await baseQuery.ToListAsync();
+        var queryText = string.Join(' ', new[] { search, mood }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+        if (string.IsNullOrWhiteSpace(queryText))
         {
-            var normalizedSearch = search.Trim().ToLower();
-            query = query.Where(memory =>
-                memory.Title.ToLower().Contains(normalizedSearch) ||
-                memory.Mood.ToLower().Contains(normalizedSearch) ||
-                memory.Description.ToLower().Contains(normalizedSearch));
+            return memories.OrderByDescending(memory => memory.Date).ToList();
         }
 
-        if (!string.IsNullOrWhiteSpace(mood))
+        var queryEmbedding = _embeddings.Embed(queryText);
+        var normalizedSearch = search?.Trim().ToLowerInvariant();
+        var scored = new List<(MemoryEntry Memory, float Score)>();
+        var backfilledAnyEmbedding = false;
+
+        foreach (var memory in memories)
         {
-            var normalizedMood = mood.Trim().ToLower();
-            query = query.Where(memory => memory.Mood.ToLower() == normalizedMood);
+            var isKeywordMatch = !string.IsNullOrWhiteSpace(normalizedSearch) && ContainsKeyword(memory, normalizedSearch);
+            var embedding = GetEmbedding(memory, out var wasBackfilled);
+            backfilledAnyEmbedding |= wasBackfilled;
+            var score = EmbeddingService.CosineSimilarity(queryEmbedding, embedding);
+
+            if (isKeywordMatch || score >= SemanticSimilarityThreshold)
+            {
+                scored.Add((memory, score));
+            }
         }
 
-        return query;
+        if (backfilledAnyEmbedding)
+        {
+            await _db.SaveChangesAsync();
+        }
+
+        return scored.OrderByDescending(entry => entry.Score).Select(entry => entry.Memory).ToList();
     }
+
+    private static bool ContainsKeyword(MemoryEntry memory, string normalizedSearch)
+    {
+        return memory.Title.ToLowerInvariant().Contains(normalizedSearch)
+            || memory.Description.ToLowerInvariant().Contains(normalizedSearch)
+            || memory.Mood.ToLowerInvariant().Contains(normalizedSearch);
+    }
+
+    // Older rows created before this feature existed have no stored embedding yet;
+    // compute and cache it here so it only needs to happen once per memory.
+    private float[] GetEmbedding(MemoryEntry memory, out bool wasBackfilled)
+    {
+        if (!string.IsNullOrEmpty(memory.Embedding))
+        {
+            var cached = JsonSerializer.Deserialize<float[]>(memory.Embedding);
+            if (cached is not null)
+            {
+                wasBackfilled = false;
+                return cached;
+            }
+        }
+
+        var embedding = _embeddings.Embed(BuildEmbeddingText(memory));
+        memory.Embedding = JsonSerializer.Serialize(embedding);
+        wasBackfilled = true;
+        return embedding;
+    }
+
+    private static string BuildEmbeddingText(MemoryEntry memory) => $"{memory.Title} {memory.Description} {memory.Mood}";
+
+    private static object ToOwnedMemoryDto(MemoryEntry memory) => new
+    {
+        memory.Id,
+        memory.Title,
+        memory.Date,
+        memory.Mood,
+        memory.Description,
+        memory.ImageUrl,
+        memory.Visibility,
+        memory.PartnerCanEdit,
+        shared = memory.Visibility == MemoryVisibility.Shared
+    };
 
     private async Task<int?> GetShareableRelationshipIdAsync(int userId)
     {

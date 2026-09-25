@@ -90,6 +90,7 @@ else
     builder.Services.AddSingleton<IEventBus, RedisEventBus>();
 }
 builder.Services.AddSingleton<MemoryEventPublisher>();
+builder.Services.AddSingleton<EmbeddingService>();
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));

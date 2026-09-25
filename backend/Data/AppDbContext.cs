@@ -56,4 +56,6 @@ public class MemoryEntry
     public string Mood { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string ImageUrl { get; set; } = string.Empty;
+    // JSON-serialized float array from EmbeddingService; null until computed.
+    public string? Embedding { get; set; }
 }

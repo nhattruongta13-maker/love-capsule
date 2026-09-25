@@ -32,6 +32,12 @@ jobs:
       - name: Restore backend dependencies
         run: dotnet restore backend.Tests/LoveCapsule.Api.Tests.csproj
 
+      - name: Download embedding model
+        run: |
+          mkdir -p backend/EmbeddingModel
+          curl -fsSL -o backend/EmbeddingModel/model.onnx "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model_qint8_arm64.onnx"
+          curl -fsSL -o backend/EmbeddingModel/vocab.txt "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/vocab.txt"
+
       - name: Build backend
         run: dotnet build backend/LoveCapsule.Api.csproj --configuration Release --no-restore
 

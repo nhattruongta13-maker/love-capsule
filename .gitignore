@@ -11,6 +11,10 @@ backend/*.db-journal
 # Local uploaded files
 backend/wwwroot/uploads/
 
+# Downloaded embedding model (fetched by backend/EmbeddingModel/download.sh or the Dockerfile)
+backend/EmbeddingModel/*.onnx
+backend/EmbeddingModel/vocab.txt
+
 # Frontend dependencies and build output
 frontend/node_modules/
 frontend/dist/

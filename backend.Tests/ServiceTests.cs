@@ -10,6 +10,10 @@ namespace LoveCapsule.Api.Tests;
 
 public class ServiceTests
 {
+    // Loading the ONNX model is expensive; InferenceSession.Run is documented as safe for
+    // concurrent use, so one shared instance is reused across every test in this class.
+    private static readonly EmbeddingService SharedEmbeddings = new();
+
     [Fact]
     public async Task MemoryEventPublisher_DeliversEventsToMultipleSubscriptions()
     {
@@ -35,7 +39,7 @@ public class ServiceTests
         await using var database = new TestDatabase();
         database.Context.Users.Add(new User { Id = 123, Email = "123@fake.com", DisplayName = "Fake User", PasswordHash = "test" });
         await database.Context.SaveChangesAsync();
-        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()));
+        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()), SharedEmbeddings);
 
         var memory = await service.CreateAsync(
             new CreateMemoryRequest("Private note", DateTime.UtcNow, "Happy", "Owner-only memory"),
@@ -52,7 +56,7 @@ public class ServiceTests
         await using var database = new TestDatabase();
         database.Context.Users.Add(new User { Id = 123, Email = "123@fake.com", DisplayName = "Fake User", PasswordHash = "test" });
         await database.Context.SaveChangesAsync();
-        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()));
+        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()), SharedEmbeddings);
 
         var memory = await service.CreateAsync(
             new CreateMemoryRequest("Private note", DateTime.UtcNow, "Happy", "Owner-only memory"),
@@ -70,7 +74,7 @@ public class ServiceTests
         await using var database = new TestDatabase();
         database.Context.Users.Add(new User { Id = 123, Email = "123@fake.com", DisplayName = "Fake User", PasswordHash = "test" });
         await database.Context.SaveChangesAsync();
-        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()));
+        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()), SharedEmbeddings);
 
         var memory = await service.CreateAsync(
             new CreateMemoryRequest("Temporary note", DateTime.UtcNow, "Happy", "Will be deleted"),
@@ -95,7 +99,7 @@ public class ServiceTests
         await using var database = new TestDatabase();
         database.Context.Users.Add(new User { Id = 123, Email = "123@fake.com", DisplayName = "Fake User", PasswordHash = "test" });
         await database.Context.SaveChangesAsync();
-        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()));
+        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()), SharedEmbeddings);
 
         var memory = await service.CreateAsync(
             new CreateMemoryRequest("Shared note", DateTime.UtcNow, "Loved", "Needs a relationship", Visibility: MemoryVisibility.Shared),
@@ -116,7 +120,7 @@ public class ServiceTests
             new MemoryEntry { OwnerUserId = 123, Title = "Mine", Description = "Owner 123", Mood = "Happy", Date = DateTime.UtcNow },
             new MemoryEntry { OwnerUserId = 456, Title = "Not mine", Description = "Owner 456", Mood = "Happy", Date = DateTime.UtcNow });
         await database.Context.SaveChangesAsync();
-        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()));
+        var service = new MemoryService(database.Context, database.Environment, new MemoryEventPublisher(new InMemoryEventBus()), SharedEmbeddings);
 
         var memories = await service.GetOwnedMemoriesAsync(123, null, null);
 

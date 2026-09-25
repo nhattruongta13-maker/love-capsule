@@ -26,4 +26,10 @@
     <ProjectReference Include="..\backend\LoveCapsule.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Content items aren't copied transitively via ProjectReference, so the embedding
+         model needs its own copy here too for tests that construct MemoryService directly. -->
+    <Content Include="..\backend\EmbeddingModel\**" Link="EmbeddingModel\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
