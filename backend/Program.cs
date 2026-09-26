@@ -91,6 +91,20 @@ else
 }
 builder.Services.AddSingleton<MemoryEventPublisher>();
 builder.Services.AddSingleton<EmbeddingService>();
+if (builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddSingleton<ILlmClient, FakeLlmClient>();
+}
+else
+{
+    var llmBaseUrl = builder.Configuration["Llm:BaseUrl"]
+        ?? throw new InvalidOperationException("Llm:BaseUrl is not configured.");
+    builder.Services.AddHttpClient<ILlmClient, LaptopLlmClient>(client =>
+    {
+        client.BaseAddress = new Uri(llmBaseUrl);
+        client.Timeout = TimeSpan.FromMinutes(5);
+    });
+}
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));

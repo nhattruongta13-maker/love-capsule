@@ -35,6 +35,18 @@ public sealed class MemoryService
             memory.RelationshipId == relationshipId && memory.Visibility == MemoryVisibility.Shared), search, mood);
     }
 
+    // Retrieval step for RAG: reuses the same keyword/semantic ranking as regular search,
+    // scoped to everything the user can see (their own memories plus shared ones), truncated to topN.
+    public async Task<List<MemoryEntry>> GetRelevantMemoriesAsync(int userId, int relationshipId, string question, int topN)
+    {
+        var baseQuery = _db.Memories.Where(memory =>
+            memory.OwnerUserId == userId ||
+            (memory.RelationshipId == relationshipId && memory.Visibility == MemoryVisibility.Shared));
+
+        var ranked = await SearchAsync(baseQuery, question, mood: null);
+        return ranked.Take(topN).ToList();
+    }
+
     public async Task<MemoryEntry?> CreateAsync(CreateMemoryRequest request, int ownerUserId)
     {
         var relationshipId = request.Visibility == MemoryVisibility.Shared

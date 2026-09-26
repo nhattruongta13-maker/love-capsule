@@ -11,6 +11,7 @@ services:
       Jwt__Issuer: LoveCapsule.Api
       Jwt__Audience: LoveCapsule.Frontend
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY outside Docker Compose}
+      Llm__BaseUrl: ${LLM_BASE_URL:?Set LLM_BASE_URL to your laptop's Ollama address, e.g. http://192.168.4.27:11434}
       Security__AuthRateLimit__PermitLimit: ${AUTH_RATE_LIMIT_PERMIT_LIMIT:-10}
       Security__AuthRateLimit__WindowSeconds: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
       Security__AuthRateLimit__SegmentsPerWindow: ${AUTH_RATE_LIMIT_SEGMENTS:-2}

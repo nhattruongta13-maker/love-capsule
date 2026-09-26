@@ -37,6 +37,11 @@ spec:
                 secretKeyRef:
                   name: love-capsule-secrets
                   key: jwt-signing-key
+            - name: Llm__BaseUrl
+              valueFrom:
+                configMapKeyRef:
+                  name: love-capsule-config
+                  key: llm-base-url
             - name: Security__AuthRateLimit__PermitLimit
               value: "1000"
           volumeMounts:
