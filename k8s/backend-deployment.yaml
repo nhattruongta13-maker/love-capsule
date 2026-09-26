@@ -42,9 +42,9 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /app/data
-          readinessProbe:     
+          readinessProbe:
             httpGet:
-              path: /api/health
+              path: /api/health/ready
               port: 5034
             initialDelaySeconds: 5
             periodSeconds: 5

@@ -139,6 +139,20 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok", message = "LoveCapsule API is live" }));
+
+app.MapGet("/api/health/ready", async (AppDbContext db, IServiceProvider services) =>
+{
+    var dbOk = await db.Database.CanConnectAsync();
+
+    // Redis is only registered outside the Testing environment; its absence there is expected, not a failure.
+    var redis = services.GetService<IConnectionMultiplexer>();
+    var redisOk = redis is null || redis.IsConnected;
+
+    return dbOk && redisOk
+        ? Results.Ok(new { status = "ready", db = dbOk, redis = redisOk })
+        : Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+});
+
 app.MapGet("/metrics", (AppMetrics metrics) => Results.Text(metrics.ToPrometheus(), "text/plain"));
 
 app.Run();
