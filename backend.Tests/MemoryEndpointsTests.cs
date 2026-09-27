@@ -648,6 +648,58 @@ public class MemoryEndpointsTests : IClassFixture<TestApplicationFactory>
         var body = await ask.Content.ReadAsStringAsync();
         Assert.Equal("This is a fake answer.", body);
     }
+
+    [Fact]
+    public async Task AgentAsk_WithoutAuthentication_ReturnsUnauthorized()
+    {
+        var response = await _client.PostAsJsonAsync("/api/relationships/1/agent-ask", new { question = "What did we do together?" });
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AgentAsk_WhenNotAcceptedMemberOfRelationship_ReturnsForbidden()
+    {
+        await AuthenticateAsync();
+
+        var response = await _client.PostAsJsonAsync("/api/relationships/999999/agent-ask", new { question = "What did we do together?" });
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AgentAsk_HappyPath_CallsToolAndStreamsGeneratedAnswer()
+    {
+        var ownerUserId = await AuthenticateClientAsync(_client);
+
+        var createRelationship = await _client.PostAsync("/api/relationships", content: null);
+        var relationship = await createRelationship.Content.ReadFromJsonAsync<JsonElement>();
+        var relationshipId = relationship.GetProperty("relationshipId").GetInt32();
+
+        using var partnerClient = _factory.CreateClient();
+        var partnerUserId = await AuthenticateClientAsync(partnerClient);
+
+        var createInvite = await _client.PostAsJsonAsync("/api/relationships/invites", new { inviteeUserId = partnerUserId });
+        var invite = await createInvite.Content.ReadFromJsonAsync<JsonElement>();
+        var inviteId = invite.GetProperty("id").GetInt32();
+        var code = invite.GetProperty("code").GetString();
+
+        var acceptInvite = await partnerClient.PostAsJsonAsync($"/api/relationships/invites/{inviteId}/accept", new { code });
+        Assert.Equal(HttpStatusCode.OK, acceptInvite.StatusCode);
+
+        await _client.PostAsJsonAsync("/api/memories", new
+        {
+            title = "Beach sunset",
+            description = "We watched the sun go down over the water together.",
+            mood = "Happy",
+            date = DateTime.UtcNow,
+            visibility = "Private"
+        });
+
+        var ask = await _client.PostAsJsonAsync($"/api/relationships/{relationshipId}/agent-ask", new { question = "What did we do together?" });
+
+        Assert.Equal(HttpStatusCode.OK, ask.StatusCode);
+        var body = await ask.Content.ReadAsStringAsync();
+        Assert.Equal("This is a fake answer.", body);
+    }
 }
 
 public sealed class TestApplicationFactory : WebApplicationFactory<Program>

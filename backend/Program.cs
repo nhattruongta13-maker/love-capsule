@@ -94,6 +94,7 @@ builder.Services.AddSingleton<EmbeddingService>();
 if (builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddSingleton<ILlmClient, FakeLlmClient>();
+    builder.Services.AddSingleton<IAgentChatClient, FakeAgentChatClient>();
 }
 else
 {
@@ -104,7 +105,13 @@ else
         client.BaseAddress = new Uri(llmBaseUrl);
         client.Timeout = TimeSpan.FromMinutes(5);
     });
+    builder.Services.AddHttpClient<IAgentChatClient, LaptopAgentChatClient>(client =>
+    {
+        client.BaseAddress = new Uri(llmBaseUrl);
+        client.Timeout = TimeSpan.FromMinutes(5);
+    });
 }
+builder.Services.AddScoped<AgentService>();
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
