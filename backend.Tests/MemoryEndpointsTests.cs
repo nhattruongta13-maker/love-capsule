@@ -2,9 +2,11 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using LoveCapsule.Api.Services;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace LoveCapsule.Api.Tests;
@@ -45,6 +47,29 @@ public class MemoryEndpointsTests : IClassFixture<TestApplicationFactory>
         await AuthenticateAsync();
         var response = await _client.GetAsync("/api/memories");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetMemories_NoFilter_CachesResultAndInvalidatesOnCreate()
+    {
+        var userId = await AuthenticateClientAsync(_client);
+        var cache = _factory.Services.GetRequiredService<ICacheService>();
+        var cacheKey = $"memories:owned:{userId}";
+
+        Assert.Null(await cache.GetAsync(cacheKey));
+
+        await _client.GetAsync("/api/memories");
+        Assert.NotNull(await cache.GetAsync(cacheKey));
+
+        await _client.PostAsJsonAsync("/api/memories", new
+        {
+            title = "Cache invalidation check",
+            description = "Created to prove the cache gets invalidated.",
+            mood = "Happy",
+            date = DateTime.UtcNow
+        });
+
+        Assert.Null(await cache.GetAsync(cacheKey));
     }
 
     [Fact]

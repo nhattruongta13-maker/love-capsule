@@ -5,29 +5,70 @@ using System.Text.Json;
 
 namespace LoveCapsule.Api.Services;
 
+// Concrete (not anonymous) type so cached JSON can round-trip back into a real object.
+public sealed record OwnedMemoryDto(
+    int Id,
+    string Title,
+    DateTime Date,
+    string Mood,
+    string Description,
+    string ImageUrl,
+    MemoryVisibility Visibility,
+    bool PartnerCanEdit,
+    bool Shared);
+
+
 public sealed class MemoryService
 {
     // Below this cosine similarity, a memory is considered semantically unrelated to the query.
     private const float SemanticSimilarityThreshold = 0.35f;
 
+    // Safety net in case an invalidation call site is ever missed - bounds worst-case staleness.
+    private static readonly TimeSpan OwnedMemoriesCacheTtl = TimeSpan.FromMinutes(5);
+
     private readonly AppDbContext _db;
     private readonly IWebHostEnvironment _environment;
     private readonly MemoryEventPublisher _events;
     private readonly EmbeddingService _embeddings;
+    private readonly ICacheService _cache;
 
-    public MemoryService(AppDbContext db, IWebHostEnvironment environment, MemoryEventPublisher events, EmbeddingService embeddings)
+    public MemoryService(AppDbContext db, IWebHostEnvironment environment, MemoryEventPublisher events, EmbeddingService embeddings, ICacheService cache)
     {
         _db = db;
         _environment = environment;
         _events = events;
         _embeddings = embeddings;
+        _cache = cache;
     }
 
-    public async Task<List<object>> GetOwnedMemoriesAsync(int userId, string? search, string? mood)
+    // Only the plain no-filter request is cached - arbitrary search/mood combinations are
+    // rarely repeated, so caching them would spend storage for little hit-rate benefit.
+    public async Task<List<OwnedMemoryDto>> GetOwnedMemoriesAsync(int userId, string? search, string? mood)
     {
+        var isCacheable = string.IsNullOrWhiteSpace(search) && string.IsNullOrWhiteSpace(mood);
+        var cacheKey = OwnedMemoriesCacheKey(userId);
+
+        if (isCacheable)
+        {
+            var cached = await _cache.GetAsync(cacheKey);
+            if (cached is not null)
+            {
+                return JsonSerializer.Deserialize<List<OwnedMemoryDto>>(cached) ?? [];
+            }
+        }
+
         var memories = await SearchAsync(_db.Memories.Where(memory => memory.OwnerUserId == userId), search, mood);
-        return memories.Select(ToOwnedMemoryDto).ToList();
+        var dtos = memories.Select(ToOwnedMemoryDto).ToList();
+
+        if (isCacheable)
+        {
+            await _cache.SetAsync(cacheKey, JsonSerializer.Serialize(dtos), OwnedMemoriesCacheTtl);
+        }
+
+        return dtos;
     }
+
+    private static string OwnedMemoriesCacheKey(int userId) => $"memories:owned:{userId}";
 
     public async Task<List<MemoryEntry>> GetSharedMemoriesAsync(int userId, int relationshipId, string? search, string? mood)
     {
@@ -83,6 +124,7 @@ public sealed class MemoryService
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
 
+        await _cache.RemoveAsync(OwnedMemoriesCacheKey(ownerUserId));
         await _events.PublishAsync(outboxEvents);
         return entry;
     }
@@ -130,6 +172,11 @@ public sealed class MemoryService
         var outboxEvents = BuildOutboxEvents(entry.Id, "MemoryUpdated", recipients);
         await _db.SaveChangesAsync();
 
+        if (entry.OwnerUserId is int updatedOwnerId)
+        {
+            await _cache.RemoveAsync(OwnedMemoriesCacheKey(updatedOwnerId));
+        }
+
         await _events.PublishAsync(outboxEvents);
         return (entry, true);
     }
@@ -160,6 +207,7 @@ public sealed class MemoryService
         var outboxEvents = BuildOutboxEvents(entry.Id, "MemoryUpdated", recipients);
         await _db.SaveChangesAsync();
 
+        await _cache.RemoveAsync(OwnedMemoriesCacheKey(ownerUserId));
         await _events.PublishAsync(outboxEvents);
         return entry;
     }
@@ -177,6 +225,7 @@ public sealed class MemoryService
         var outboxEvents = BuildOutboxEvents(entry.Id, "MemoryDeleted", recipients);
         _db.Memories.Remove(entry);
         await _db.SaveChangesAsync();
+        await _cache.RemoveAsync(OwnedMemoriesCacheKey(ownerUserId));
         await _events.PublishAsync(outboxEvents);
         return true;
     }
@@ -296,8 +345,7 @@ public sealed class MemoryService
 
     private static string BuildEmbeddingText(MemoryEntry memory) => $"{memory.Title} {memory.Description} {memory.Mood}";
 
-    private static object ToOwnedMemoryDto(MemoryEntry memory) => new
-    {
+    private static OwnedMemoryDto ToOwnedMemoryDto(MemoryEntry memory) => new(
         memory.Id,
         memory.Title,
         memory.Date,
@@ -306,8 +354,7 @@ public sealed class MemoryService
         memory.ImageUrl,
         memory.Visibility,
         memory.PartnerCanEdit,
-        shared = memory.Visibility == MemoryVisibility.Shared
-    };
+        memory.Visibility == MemoryVisibility.Shared);
 
     private async Task<int?> GetShareableRelationshipIdAsync(int userId)
     {

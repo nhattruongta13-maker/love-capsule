@@ -82,6 +82,7 @@ builder.Services.AddSingleton<AppMetrics>();
 if (builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddSingleton<IEventBus, InMemoryEventBus>();
+    builder.Services.AddSingleton<ICacheService, InMemoryCacheService>();
 }
 else
 {
@@ -89,6 +90,7 @@ else
         ?? throw new InvalidOperationException("Redis connection string is not configured.");
     builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConnectionString));
     builder.Services.AddSingleton<IEventBus, RedisEventBus>();
+    builder.Services.AddSingleton<ICacheService, RedisCacheService>();
 }
 builder.Services.AddSingleton<MemoryEventPublisher>();
 builder.Services.AddSingleton<EmbeddingService>();
