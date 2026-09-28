@@ -55,7 +55,7 @@ public class AuthController : ControllerBase
             {
                 OwnerUserId = user.Id,
                 Title = "First coffee date",
-                Date = new DateTime(2024, 6, 15),
+                Date = new DateTime(2024, 6, 15, 0, 0, 0, DateTimeKind.Utc),
                 Mood = "Happy",
                 Description = "A placeholder showing where your first shared memory can go."
             },
@@ -63,7 +63,7 @@ public class AuthController : ControllerBase
             {
                 OwnerUserId = user.Id,
                 Title = "Sunset walk",
-                Date = new DateTime(2024, 8, 11),
+                Date = new DateTime(2024, 8, 11, 0, 0, 0, DateTimeKind.Utc),
                 Mood = "Loved",
                 Description = "A placeholder showing how a saved memory will appear in your timeline."
             });

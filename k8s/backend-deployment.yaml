@@ -24,8 +24,13 @@ spec:
               value: Production
             - name: ASPNETCORE_URLS
               value: http://+:5034
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: love-capsule-secrets
+                  key: postgres-password
             - name: ConnectionStrings__DefaultConnection
-              value: Data Source=/app/data/lovecapsule.db
+              value: Host=postgres;Port=5432;Database=lovecapsule;Username=lovecapsule;Password=$(POSTGRES_PASSWORD)
             - name: ConnectionStrings__Redis
               value: redis:6379
             - name: Jwt__Issuer
@@ -44,9 +49,6 @@ spec:
                   key: llm-base-url
             - name: Security__AuthRateLimit__PermitLimit
               value: "1000"
-          volumeMounts:
-            - name: data
-              mountPath: /app/data
           readinessProbe:
             httpGet:
               path: /api/health/ready
@@ -60,13 +62,6 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 15
             failureThreshold: 3
-      volumes:
-        # hostPath is fine here because this is a single-node cluster; every
-        # pod lands on the same node, so they all see the same SQLite file.
-        - name: data
-          hostPath:
-            path: /var/lib/love-capsule-data
-            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service

@@ -10,8 +10,23 @@ jobs:
   backend:
     name: Backend build and tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: lovecapsule
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: lovecapsule_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lovecapsule"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       ASPNETCORE_ENVIRONMENT: Testing
+      ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=lovecapsule_test;Username=lovecapsule;Password=ci-only-password
       Jwt__SigningKey: test-only-signing-key-used-by-ci
       Security__AuthRateLimit__PermitLimit: 1000
       Security__AuthRateLimit__WindowSeconds: 60
